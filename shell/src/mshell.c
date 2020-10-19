@@ -21,13 +21,18 @@ main(int argc, char *argv[])
 	char buf[MAX_LINE_LENGTH+1];
 
     write(STDOUT, PROMPT_STR, sizeof(PROMPT_STR));
-	while ((readSize = read(STDIN, buf, MAX_LINE_LENGTH))){
+	while ((readSize = read(STDIN, buf, MAX_LINE_LENGTH+1))){
+
 	    buf[readSize] = 0;
-		ln = parseline(buf);
+	    ln = NULL;
+
+	    if (readSize<=MAX_LINE_LENGTH)
+	        ln = parseline(buf);
 
 		if (ln==NULL){
             write(STDERR, SYNTAX_ERROR_STR, sizeof(SYNTAX_ERROR_STR));
             write(STDERR, "\n", sizeof("\n"));
+            continue;
 		}
 
         com = pickfirstcommand(ln);
@@ -60,22 +65,6 @@ main(int argc, char *argv[])
 	}
 
 	write(STDOUT, "\n", sizeof("\n"));
-
-	/*ln = parseline("ls -las | grep k | wc ; echo abc > f1 ;  cat < f2 ; echo abc >> f3\n");
-	printparsedline(ln);
-	printf("\n");
-	com = pickfirstcommand(ln);
-	printcommand(com,1);
-
-	ln = parseline("sleep 3 &");
-	printparsedline(ln);
-	printf("\n");
-	
-	ln = parseline("echo  & abc >> f3\n");
-	printparsedline(ln);
-	printf("\n");
-	com = pickfirstcommand(ln);
-	printcommand(com,1);*/
 
 	return 0;
 }
