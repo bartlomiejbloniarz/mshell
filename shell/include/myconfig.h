@@ -5,4 +5,6 @@
 #define STDIN 0
 #define STDERR 2
 
+#define FAILURE 1
+
 #endif //SHELL_MYCONFIG_H

@@ -3,8 +3,8 @@
 #include <wait.h>
 #include <errno.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/stat.h>
+#include <stdlib.h>
 
 #include "config.h"
 #include "siparse.h"
@@ -44,6 +44,7 @@ main(int argc, char *argv[])
 
             ln = NULL;
             buf[stop] = 0;
+
             if (stop - start <= MAX_LINE_LENGTH) {
                 ln = parseline(buf + start);
             }
@@ -56,35 +57,51 @@ main(int argc, char *argv[])
 
             com = pickfirstcommand(ln);
 
-            pid = fork();
-            if (pid == 0) {
-                int i = 0;
+            if (com==NULL)
+                continue;
+
+            builtin_pair* builtinPair = findInBuiltins(com->args->arg);
+
+            if (builtinPair != NULL){
                 char *tab[argseqLength(com->args) + 1];
-                argseq *temp = com->args;
-                do {
-                    tab[i] = temp->arg;
-                    i++;
-                    temp = temp->next;
-                } while (temp != com->args);
-                tab[i] = NULL;
-
-                execvp(com->args->arg, tab);
-
-                switch (errno) {
-                    case ENOENT:
-                        writeErrorForProgram(com->args->arg, "no such file or directory\n");
-                        break;
-                    case EACCES:
-                        writeErrorForProgram(com->args->arg, "permission denied\n");
-                        break;
-                    default:
-                        writeErrorForProgram(com->args->arg, "exec error\n");
-                        break;
+                argsTab(com, tab);
+                if (builtinPair->fun(tab)){
+                    int size = strlen(builtinPair->name);
+                    char temp[size+17];
+                    mystrcpy(temp, "Builtin ");
+                    mystrcpy(temp+8, builtinPair->name);
+                    mystrcpy(temp+8+size, " error.\n");
+                    write(STDERR, temp, size+16);
                 }
+            }
+            else {
+                pid = fork();
+                if (pid == -1) {
+                    exit(EXEC_FAILURE);
+                }
+                if (pid == 0) {
 
-                return EXEC_FAILURE;
-            } else {
-                waitpid(pid, &wStatus, 0);
+                    char *tab[argseqLength(com->args) + 1];
+                    argsTab(com, tab);
+
+                    execvp(com->args->arg, tab);
+
+                    switch (errno) {
+                        case ENOENT:
+                            writeErrorForProgram(com->args->arg, "no such file or directory\n");
+                            break;
+                        case EACCES:
+                            writeErrorForProgram(com->args->arg, "permission denied\n");
+                            break;
+                        default:
+                            writeErrorForProgram(com->args->arg, "exec error\n");
+                            break;
+                    }
+
+                    return EXEC_FAILURE;
+                } else {
+                    waitpid(pid, &wStatus, 0);
+                }
             }
         }
 	    offset = readSize;
