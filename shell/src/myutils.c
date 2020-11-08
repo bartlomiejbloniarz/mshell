@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <myconfig.h>
+#include <asm/errno.h>
+#include <errno.h>
 #include "siparse.h"
 #include "config.h"
 #include "builtins.h"
@@ -73,4 +75,43 @@ char isNumber(const char* str){
             return 0;
     }
     return 1;
+}
+
+void swap(int* a, int* b){
+    int temp = a[0];
+    a[0] = b[0];
+    b[0] = temp;
+    temp = a[1];
+    a[1] = b[1];
+    b[1] = temp;
+}
+
+int commandseqLength(commandseq* commands){ //TODO return -1 when empty pipe
+    commandseq* temp = commands;
+    int count = 0;
+    char bad = 0;
+    do{
+        count++;
+        if (temp->com == NULL)
+            bad = 1;
+        if (bad && count>1)
+            return -1;
+        temp = temp->next;
+    }while(temp!=commands);
+    char* tab[count];
+    return count;
+}
+
+void printErrors(char* name){
+    switch (errno) {
+        case ENOENT:
+            writeErrorForProgram(name, "no such file or directory\n");
+            break;
+        case EACCES:
+            writeErrorForProgram(name, "permission denied\n");
+            break;
+        default:
+            writeErrorForProgram(name, "exec error\n");
+            break;
+    }
 }

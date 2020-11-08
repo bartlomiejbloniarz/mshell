@@ -20,4 +20,10 @@ void argsTab(command*, char**);
 
 char isNumber(char*);
 
+void swap(int*, int*);
+
+int commandseqLength(commandseq*);
+
+void printErrors(char*);
+
 #endif //SHELL_MYUTILS_H
