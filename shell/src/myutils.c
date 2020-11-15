@@ -4,6 +4,7 @@
 #include <myconfig.h>
 #include <asm/errno.h>
 #include <errno.h>
+#include <stdlib.h>
 #include "siparse.h"
 #include "config.h"
 #include "builtins.h"
@@ -114,4 +115,11 @@ void printErrors(char* name){
             writeErrorForProgram(name, "exec error\n");
             break;
     }
+}
+
+void writeTermOrKill(pid_t pid, int stat){
+    if (WIFEXITED(stat))
+        printf("Background process %d terminated. (exited with status %d)\n", pid, stat);
+    else
+        printf("Background process %d terminated. (killed by signal %d)\n", pid, stat);
 }

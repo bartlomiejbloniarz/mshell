@@ -13,8 +13,42 @@
 #include "myconfig.h"
 #include "myutils.h"
 
+volatile int children=0, counter=0, pidAmount=0;
+pid_t terminated[200]; //TODO: constant
+int status[200];
+pid_t pids[200];
+
+void handler(int sig_nb){
+    pid_t child;
+    char check = 1;
+    int wStatus;
+    do{
+        child = waitpid(-1, &wStatus, WNOHANG);
+        if (child>0) {
+            for (int i=0; i<pidAmount; i++){
+                if (pids[i] == child) {
+                    check = 0;
+                    break;
+                }
+            }
+            if (check) {
+                status[counter] = wStatus;
+                terminated[counter++] = child;
+            }
+            else
+                children--;
+        }
+    } while (child>0);
+}
+
+void cHandler(int sig_nb){
+    for (int i=0; i<children; i++)
+        kill(pids[i], SIGINT);
+}
+
 int managePipeLine(pipelineseq *ln){
 
+    char background;
     pipelineseq * pls;
     pls = ln;
     command *com;
@@ -35,7 +69,12 @@ int managePipeLine(pipelineseq *ln){
             pls = pls->next;
             return 0;
         }
-        pid_t pids[commandsLength];
+        background = (char)(pls->pipeline->flags == INBACKGROUND);
+        if (!background) {
+            children = commandsLength;
+            pidAmount = commandsLength;
+        }
+
         int idx = 0;
         do {
             endOfPipeline = (char)(commands->next == pls->pipeline->commands);
@@ -65,6 +104,8 @@ int managePipeLine(pipelineseq *ln){
                     return EXEC_FAILURE;
                 }
                 if (pid == 0) {
+                    if (background)
+                        setsid();
                     close(fd2[STDIN]);
                     redirseq *redirects = com->redirs;
                     if (redirects) {
@@ -127,14 +168,18 @@ int managePipeLine(pipelineseq *ln){
                     return EXEC_FAILURE;
                 }
                 else {
-                    pids[idx++] = pid;
+                    if (!background)
+                        pids[idx++] = pid;
                     if (fd1[STDIN] != -1)
                         close(fd1[STDIN]);
                     if (!endOfPipeline)
                         close(fd2[STDOUT]);
                     else {
-                        for (int i = 0; i < commandsLength; i++)
-                            waitpid(pids[i], &wStatus, 0);
+                        if (!background) {
+                            while (children>0);
+                            idx = 0;
+                            pidAmount = 0;
+                        }
                     }
                     swap(fd1, fd2);
                 }
@@ -153,6 +198,19 @@ main(int argc, char *argv[])
     char syntaxError = 0;
     struct stat stat;
     fstat(STDIN, &stat);
+
+    struct sigaction act;
+    act.sa_handler = handler;
+    act.sa_flags = SA_RESTART;
+    sigemptyset(&act.sa_mask);
+    sigaction(SIGCHLD, &act, NULL);
+
+    struct sigaction cAct;
+    cAct.sa_handler = cHandler;
+    cAct.sa_flags = SA_RESTART;
+    sigemptyset(&cAct.sa_mask);
+    sigaction(SIGINT, &cAct, NULL);
+
 
     char buf[2*MAX_LINE_LENGTH+2];
 
@@ -192,8 +250,13 @@ main(int argc, char *argv[])
 
         }
         offset = readSize;
-        if (S_ISCHR(stat.st_mode))
+        if (S_ISCHR(stat.st_mode)) {
+            for (int i=0; i<counter; i++){
+                writeTermOrKill(terminated[i], status[i]);
+            }
+            counter = 0;
             write(STDOUT, PROMPT_STR, sizeof(PROMPT_STR));
+        }
 
         if (offset>MAX_LINE_LENGTH){
             if (offset - start>MAX_LINE_LENGTH){
