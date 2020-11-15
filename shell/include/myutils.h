@@ -28,4 +28,5 @@ void printErrors(char*);
 
 void writeTermOrKill(pid_t pid, int stat);
 
+
 #endif //SHELL_MYUTILS_H

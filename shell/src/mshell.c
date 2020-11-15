@@ -14,9 +14,9 @@
 #include "myutils.h"
 
 volatile int children=0, counter=0, pidAmount=0;
-pid_t terminated[200]; //TODO: constant
-int status[200];
-pid_t pids[200];
+pid_t terminated[BACKGROUND_MEMORY];
+int status[BACKGROUND_MEMORY];
+pid_t pids[MAX_LINE_LENGTH];
 
 void handler(int sig_nb){
     pid_t child;
@@ -41,12 +41,7 @@ void handler(int sig_nb){
     } while (child>0);
 }
 
-void cHandler(int sig_nb){
-    for (int i=0; i<children; i++)
-        kill(pids[i], SIGINT);
-}
-
-int managePipeLine(pipelineseq *ln){
+int managePipeLine(pipelineseq *ln, sigset_t sigintSet, sigset_t sigChildSet){
 
     char background;
     pipelineseq * pls;
@@ -71,8 +66,10 @@ int managePipeLine(pipelineseq *ln){
         }
         background = (char)(pls->pipeline->flags == INBACKGROUND);
         if (!background) {
+            sigprocmask(SIG_BLOCK, &sigChildSet, NULL);
             children = commandsLength;
             pidAmount = commandsLength;
+            sigprocmask(SIG_UNBLOCK, &sigChildSet, NULL);
         }
 
         int idx = 0;
@@ -106,6 +103,7 @@ int managePipeLine(pipelineseq *ln){
                 if (pid == 0) {
                     if (background)
                         setsid();
+                    sigprocmask(SIG_UNBLOCK, &sigintSet, NULL);
                     close(fd2[STDIN]);
                     redirseq *redirects = com->redirs;
                     if (redirects) {
@@ -168,17 +166,25 @@ int managePipeLine(pipelineseq *ln){
                     return EXEC_FAILURE;
                 }
                 else {
-                    if (!background)
+                    if (!background) {
+                        sigprocmask(SIG_BLOCK, &sigChildSet, NULL);
                         pids[idx++] = pid;
+                        sigprocmask(SIG_UNBLOCK, &sigChildSet, NULL);
+                    }
                     if (fd1[STDIN] != -1)
                         close(fd1[STDIN]);
                     if (!endOfPipeline)
                         close(fd2[STDOUT]);
                     else {
                         if (!background) {
-                            while (children>0);
+                            sigset_t old;
+                            sigprocmask(SIG_BLOCK, &sigChildSet, &old);
+                            while (children>0){
+                                sigsuspend(&old);
+                            }
                             idx = 0;
                             pidAmount = 0;
+                            sigprocmask(SIG_UNBLOCK, &sigChildSet, NULL);
                         }
                     }
                     swap(fd1, fd2);
@@ -205,11 +211,15 @@ main(int argc, char *argv[])
     sigemptyset(&act.sa_mask);
     sigaction(SIGCHLD, &act, NULL);
 
-    struct sigaction cAct;
-    cAct.sa_handler = cHandler;
-    cAct.sa_flags = SA_RESTART;
-    sigemptyset(&cAct.sa_mask);
-    sigaction(SIGINT, &cAct, NULL);
+    sigset_t sigintSet;
+    sigemptyset(&sigintSet);
+    sigaddset(&sigintSet, SIGINT);
+
+    sigset_t sigChildSet;
+    sigemptyset(&sigChildSet);
+    sigaddset(&sigChildSet, SIGCHLD);
+
+    sigprocmask(SIG_BLOCK, &sigintSet, NULL);
 
 
     char buf[2*MAX_LINE_LENGTH+2];
@@ -244,17 +254,19 @@ main(int argc, char *argv[])
                 continue;
             }
 
-            int pipeLineResult = managePipeLine(ln);
+            int pipeLineResult = managePipeLine(ln, sigintSet, sigChildSet);
             if (pipeLineResult)
                 return pipeLineResult;
 
         }
         offset = readSize;
         if (S_ISCHR(stat.st_mode)) {
+            sigprocmask(SIG_BLOCK, &sigChildSet, NULL);
             for (int i=0; i<counter; i++){
                 writeTermOrKill(terminated[i], status[i]);
             }
             counter = 0;
+            sigprocmask(SIG_UNBLOCK, &sigChildSet, NULL);
             write(STDOUT, PROMPT_STR, sizeof(PROMPT_STR));
         }
 

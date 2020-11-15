@@ -7,4 +7,6 @@
 
 #define FAILURE 1
 
+#define BACKGROUND_MEMORY 200
+
 #endif //SHELL_MYCONFIG_H
