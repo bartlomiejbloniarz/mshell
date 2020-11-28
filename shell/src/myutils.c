@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <myconfig.h>
-#include <asm/errno.h>
 #include <errno.h>
 #include <stdlib.h>
 #include "siparse.h"
 #include "config.h"
 #include "builtins.h"
+#include <sys/wait.h>
 
 int argseqLength(argseq* args){
     argseq* temp = args;
@@ -42,14 +42,6 @@ int findEndLine(const char* buf, int begin, int end){
     return -1;
 }
 
-void mystrcpy(char* dest, const char* src){
-    for (int i=0;;i++){
-        dest[i]=src[i];
-        if (src[i]==0)
-            return;
-    }
-}
-
 void argsTab(command* com, char** tab){
     int i = 0;
 
@@ -70,8 +62,16 @@ builtin_pair* findInBuiltins(char* com){
     return NULL;
 }
 
+void strShift(char* str, int start){
+    for (int i=0;;i++){
+        str[i]=str[i+start];
+        if (str[i]==0)
+            return;
+    }
+}
+
 char isNumber(const char* str){
-    for(int i=0; str + i !=NULL; i++){
+    for(int i=0; str[i] != 0; i++){
         if (str[i]<'0' || str[i]>'9')
             return 0;
     }
@@ -87,7 +87,7 @@ void swap(int* a, int* b){
     b[1] = temp;
 }
 
-int commandseqLength(commandseq* commands){ //TODO return -1 when empty pipe
+int commandseqLength(commandseq* commands){
     commandseq* temp = commands;
     int count = 0;
     char bad = 0;
@@ -99,7 +99,6 @@ int commandseqLength(commandseq* commands){ //TODO return -1 when empty pipe
             return -1;
         temp = temp->next;
     }while(temp!=commands);
-    char* tab[count];
     return count;
 }
 

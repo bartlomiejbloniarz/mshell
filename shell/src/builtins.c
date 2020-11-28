@@ -59,8 +59,12 @@ int lkill(char* argv[]){
     if (argv[2]) {
         if (argv[3])
             return FAILURE;
+        if (!isNumber(argv[2]) || !isNumber(argv[1]+1))
+            return FAILURE;
         return kill(atoi(argv[2]), atoi(argv[1] + 1));
     }
+    if (!isNumber(argv[1]))
+        return FAILURE;
     return kill(atoi(argv[1]), SIGTERM);
 }
 
@@ -69,7 +73,7 @@ int lls(char* argv[]){
     if (argv[1] == NULL)
         getcwd(temp, FILENAME_MAX);
     else
-        mystrcpy(temp, argv[1]);
+        strcpy(temp, argv[1]);
     DIR* dir = opendir(temp);
     if (dir == NULL)
         return FAILURE;
@@ -80,7 +84,7 @@ int lls(char* argv[]){
             continue;
         int size = strlen(dire->d_name)+2;
         char tab[size];
-        mystrcpy(tab, dire->d_name);
+        strcpy(tab, dire->d_name);
         tab[size-2] = '\n'; tab[size-1] = 0;
         write(STDOUT, tab, size-1);
     }

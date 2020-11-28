@@ -12,13 +12,11 @@ void writeSyntaxError();
 
 int findEndLine(const char*, int, int);
 
-void mystrcpy(char*, const char*);
-
 builtin_pair* findInBuiltins(char*);
 
 void argsTab(command*, char**);
 
-char isNumber(char*);
+char isNumber(const char*);
 
 void swap(int*, int*);
 
@@ -28,5 +26,6 @@ void printErrors(char*);
 
 void writeTermOrKill(pid_t pid, int stat);
 
+void strShift(char* str, int start);
 
 #endif //SHELL_MYUTILS_H
