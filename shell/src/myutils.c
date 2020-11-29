@@ -20,18 +20,26 @@ int argseqLength(argseq* args){
     return count;
 }
 
-void writeErrorForProgram(char* name, char* content){
+int safeWrite(int fd, const void* buf, size_t size){
+    while (write(fd, buf, size) == -1){
+        if (errno != EINTR)
+            return -1;
+    }
+    return 0;
+}
+
+int writeErrorForProgram(char* name, char* content){
     unsigned long long size = strlen(name)+strlen(content)+3;
     char s[size];
     snprintf(s, size, "%s: %s", name, content);
-    write(STDERR, s, sizeof(s)-1);
+    return safeWrite(STDERR, s, sizeof(s)-1);
 }
 
-void writeSyntaxError(){
+int writeSyntaxError(){
     unsigned long long size = strlen(SYNTAX_ERROR_STR)+2;
     char s[size];
     snprintf(s, size, "%s%c", SYNTAX_ERROR_STR, '\n');
-    write(STDERR, s, sizeof(s)-1);
+    return safeWrite(STDERR, s, sizeof(s)-1);
 }
 
 int findEndLine(const char* buf, int begin, int end){
@@ -102,17 +110,14 @@ int commandseqLength(commandseq* commands){
     return count;
 }
 
-void printErrors(char* name){
+int printErrors(char* name){
     switch (errno) {
         case ENOENT:
-            writeErrorForProgram(name, "no such file or directory\n");
-            break;
+            return writeErrorForProgram(name, "no such file or directory\n");
         case EACCES:
-            writeErrorForProgram(name, "permission denied\n");
-            break;
+            return writeErrorForProgram(name, "permission denied\n");
         default:
-            writeErrorForProgram(name, "exec error\n");
-            break;
+            return writeErrorForProgram(name, "exec error\n");
     }
 }
 
@@ -122,3 +127,4 @@ void writeTermOrKill(pid_t pid, int stat){
     else
         printf("Background process %d terminated. (killed by signal %d)\n", pid, stat);
 }
+

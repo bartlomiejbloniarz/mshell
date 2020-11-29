@@ -86,7 +86,7 @@ int lls(char* argv[]){
         char tab[size];
         strcpy(tab, dire->d_name);
         tab[size-2] = '\n'; tab[size-1] = 0;
-        write(STDOUT, tab, size-1);
+        safeWrite(STDOUT, tab, size-1);
     }
     if (errno)
         return FAILURE;

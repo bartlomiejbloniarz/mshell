@@ -27,7 +27,7 @@ pid_t pids[MAX_LINE_LENGTH];
 void handler(int sig_nb){
     pid_t child;
     char check = 1;
-    int wStatus;
+    int wStatus, tempErrno = errno;
     do{
         child = waitpid(-1, &wStatus, WNOHANG);
         if (child>0) {
@@ -45,6 +45,7 @@ void handler(int sig_nb){
                 children--;
         }
     } while (child>0);
+    errno = tempErrno;
 }
 
 int managePipeLine(pipelineseq* pls, commandseq* commands, char background, sigset_t* sigintSet, sigset_t* sigChildSet){
@@ -78,7 +79,9 @@ int managePipeLine(pipelineseq* pls, commandseq* commands, char background, sigs
                 strcpy(temp, "Builtin ");
                 strcpy(temp + 8, builtinPair->name);
                 strcpy(temp + 8 + size, " error.\n");
-                write(STDERR, temp, size + 16);
+                if (safeWrite(STDERR, temp, size + 16))
+                    return FAILURE;
+
             }
         } else {
             if (!endOfPipeline)
@@ -191,10 +194,8 @@ int managePipeLineSeq(pipelineseq *ln, sigset_t* sigintSet, sigset_t* sigChildSe
     do {
         commands = pls->pipeline->commands;
         int commandsLength = commandseqLength(commands);
-        if (commandsLength == -1){
-            writeSyntaxError();
-            return 0;
-        }
+        if (commandsLength == -1)
+            return writeSyntaxError();
         background = (char)(pls->pipeline->flags == INBACKGROUND);
         if (!background) {
             sigprocmask(SIG_BLOCK, sigChildSet, NULL);
@@ -224,7 +225,7 @@ main(int argc, char *argv[])
 
     struct sigaction act;
     act.sa_handler = handler;
-    act.sa_flags = SA_RESTART;
+    //act.sa_flags = SA_RESTART;
     sigemptyset(&act.sa_mask);
     sigaction(SIGCHLD, &act, NULL);
 
@@ -240,19 +241,25 @@ main(int argc, char *argv[])
 
     char buf[2*MAX_LINE_LENGTH+2];
 
-    if (S_ISCHR(stat.st_mode))
-        write(STDOUT, PROMPT_STR, sizeof(PROMPT_STR));
+    if (S_ISCHR(stat.st_mode)) {
+        if (safeWrite(STDOUT, PROMPT_STR, sizeof(PROMPT_STR)))
+            return EXIT_FAILURE;
+    }
     while ((readSize = read(STDIN, buf + offset, MAX_LINE_LENGTH+1))){
 
-        if (readSize==-1)
+        if (readSize==-1) {
+            if (errno == EINTR)
+                continue;
             return EXIT_FAILURE;
+        }
 
         readSize += offset;
         while((stop = findEndLine(buf, start, readSize))!=-1) {
 
             if (syntaxError){
                 syntaxError = 0;
-                writeSyntaxError();
+                if (writeSyntaxError())
+                    return EXIT_FAILURE;
                 start = stop + 1;
                 continue;
             }
@@ -266,7 +273,8 @@ main(int argc, char *argv[])
             start = stop + 1;
 
             if (ln == NULL) {
-                writeSyntaxError();
+                if (writeSyntaxError())
+                    return EXIT_FAILURE;
                 continue;
             }
 
@@ -283,7 +291,8 @@ main(int argc, char *argv[])
             }
             counter = 0;
             sigprocmask(SIG_UNBLOCK, &sigChildSet, NULL);
-            write(STDOUT, PROMPT_STR, sizeof(PROMPT_STR));
+            if (safeWrite(STDOUT, PROMPT_STR, sizeof(PROMPT_STR)))
+                return EXIT_FAILURE;
         }
 
         if (offset>MAX_LINE_LENGTH){

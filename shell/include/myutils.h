@@ -4,11 +4,13 @@
 #include "builtins.h"
 #include "siparse.h"
 
+int safeWrite(int fd, const void* buf, size_t size);
+
 int argseqLength(argseq*);
 
-void writeErrorForProgram(char*, char*);
+int writeErrorForProgram(char*, char*);
 
-void writeSyntaxError();
+int writeSyntaxError();
 
 int findEndLine(const char*, int, int);
 
@@ -22,7 +24,7 @@ void swap(int*, int*);
 
 int commandseqLength(commandseq*);
 
-void printErrors(char*);
+int printErrors(char*);
 
 void writeTermOrKill(pid_t pid, int stat);
 
