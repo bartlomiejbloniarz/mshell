@@ -88,14 +88,19 @@ int managePipeLine(pipelineseq* pls, commandseq* commands, char background, sigs
                 pipe(fd2);
             pid = fork();
             if (pid == -1) {
-                return EXEC_FAILURE;
+                return EXIT_FAILURE;
             }
             if (pid == 0) {
-                if (background)
-                    setsid();
-                sigprocmask(SIG_UNBLOCK, sigintSet, NULL);
-                if (!endOfPipeline)
-                    close(fd2[STDIN]);
+                if (background) {
+                    if (setsid() == -1)
+                        return EXIT_FAILURE;
+                }
+                if (sigprocmask(SIG_UNBLOCK, sigintSet, NULL) == -1)
+                    return EXIT_FAILURE;
+                if (!endOfPipeline) {
+                    if (close(fd2[STDIN]) == -1)
+                        return EXIT_FAILURE;
+                }
                 redirseq *redirects = com->redirs;
                 if (redirects) {
                     do {
@@ -113,18 +118,22 @@ int managePipeLine(pipelineseq* pls, commandseq* commands, char background, sigs
                     inputFd = open(input, O_RDONLY);
                     if (inputFd == -1){
                         printErrors(input);
-                        return EXEC_FAILURE;
+                        return EXIT_FAILURE;
                     }
                     if (dup2(inputFd, STDIN) == -1)
-                        return EXEC_FAILURE;
-                    close(inputFd);
-                    if (fd1[STDIN] != -1)
-                        close(fd1[STDIN]);
+                        return EXIT_FAILURE;
+                    if (close(inputFd) == -1)
+                        return EXIT_FAILURE;
+                    if (fd1[STDIN] != -1) {
+                        if (close(fd1[STDIN]) == -1)
+                            return EXIT_FAILURE;
+                    }
                 }
                 else if (fd1[STDIN] != -1){
                     if (dup2(fd1[STDIN], STDIN) == -1)
-                        return EXEC_FAILURE;
-                    close(fd1[STDIN]);
+                        return EXIT_FAILURE;
+                    if (close(fd1[STDIN]) == -1)
+                        return EXIT_FAILURE;
                 }
 
                 if (output) {
@@ -134,18 +143,22 @@ int managePipeLine(pipelineseq* pls, commandseq* commands, char background, sigs
                         outputFd = open(output, O_WRONLY | O_TRUNC | O_CREAT, S_IRWXU);
                     if (outputFd == -1){
                         printErrors(output);
-                        return EXEC_FAILURE;
+                        return EXIT_FAILURE;
                     }
                     if (dup2(outputFd, STDOUT) == -1)
-                        return EXEC_FAILURE;
-                    close(outputFd);
-                    if (!endOfPipeline)
-                        close(fd2[STDOUT]);
+                        return EXIT_FAILURE;
+                    if (close(outputFd) == -1)
+                        return EXIT_FAILURE;
+                    if (!endOfPipeline) {
+                        if (close(fd2[STDOUT]) == -1)
+                            return EXIT_FAILURE;
+                    }
                 }
                 else if (!endOfPipeline){
                     if(dup2(fd2[STDOUT], STDOUT) == -1)
-                        return EXEC_FAILURE;
-                    close(fd2[STDOUT]);
+                        return EXIT_FAILURE;
+                    if (close(fd2[STDOUT]) == -1)
+                        return EXIT_FAILURE;
                 }
 
                 char *tab[argseqLength(com->args) + 1];
@@ -157,24 +170,32 @@ int managePipeLine(pipelineseq* pls, commandseq* commands, char background, sigs
             }
             else {
                 if (!background) {
-                    sigprocmask(SIG_BLOCK, sigChildSet, NULL);
+                    if (sigprocmask(SIG_BLOCK, sigChildSet, NULL))
+                        return EXIT_FAILURE;
                     if (idx < BACKGROUND_MEMORY)
                         pids[idx++] = pid;
-                    sigprocmask(SIG_UNBLOCK, sigChildSet, NULL);
+                    if (sigprocmask(SIG_UNBLOCK, sigChildSet, NULL))
+                        return EXIT_FAILURE;
                 }
-                if (fd1[STDIN] != -1)
-                    close(fd1[STDIN]);
-                if (!endOfPipeline)
-                    close(fd2[STDOUT]);
+                if (fd1[STDIN] != -1) {
+                    if (close(fd1[STDIN]) == -1)
+                        return EXIT_FAILURE;
+                }
+                if (!endOfPipeline) {
+                    if (close(fd2[STDOUT]) == -1)
+                        return EXIT_FAILURE;
+                }
                 else {
                     if (!background) {
                         sigset_t old;
-                        sigprocmask(SIG_BLOCK, sigChildSet, &old);
+                        if (sigprocmask(SIG_BLOCK, sigChildSet, &old))
+                            return EXIT_FAILURE;
                         while (children>0){
                             sigsuspend(&old);
                         }
                         pidAmount = 0;
-                        sigprocmask(SIG_UNBLOCK, sigChildSet, NULL);
+                        if (sigprocmask(SIG_UNBLOCK, sigChildSet, NULL))
+                            return EXIT_FAILURE;
                     }
                 }
                 swap(fd1, fd2);
@@ -198,10 +219,12 @@ int managePipeLineSeq(pipelineseq *ln, sigset_t* sigintSet, sigset_t* sigChildSe
             return writeSyntaxError();
         background = (char)(pls->pipeline->flags == INBACKGROUND);
         if (!background) {
-            sigprocmask(SIG_BLOCK, sigChildSet, NULL);
+            if (sigprocmask(SIG_BLOCK, sigChildSet, NULL))
+                return EXIT_FAILURE;
             children = commandsLength;
             pidAmount = commandsLength;
-            sigprocmask(SIG_UNBLOCK, sigChildSet, NULL);
+            if (sigprocmask(SIG_UNBLOCK, sigChildSet, NULL))
+                return EXIT_FAILURE;
         }
 
         int pipeLineResult = managePipeLine(pls, commands, background, sigintSet, sigChildSet);
@@ -237,7 +260,8 @@ main(int argc, char *argv[])
     sigemptyset(&sigChildSet);
     sigaddset(&sigChildSet, SIGCHLD);
 
-    sigprocmask(SIG_BLOCK, &sigintSet, NULL);
+    if (sigprocmask(SIG_BLOCK, &sigintSet, NULL))
+        return EXIT_FAILURE;
 
     char buf[2*MAX_LINE_LENGTH+2];
 
@@ -285,12 +309,14 @@ main(int argc, char *argv[])
         }
         offset = readSize;
         if (S_ISCHR(stat.st_mode)) {
-            sigprocmask(SIG_BLOCK, &sigChildSet, NULL);
+            if (sigprocmask(SIG_BLOCK, &sigChildSet, NULL))
+                return EXIT_FAILURE;
             for (int i=0; i<counter; i++){
                 writeTermOrKill(terminated[i].pid, terminated[i].status);
             }
             counter = 0;
-            sigprocmask(SIG_UNBLOCK, &sigChildSet, NULL);
+            if (sigprocmask(SIG_UNBLOCK, &sigChildSet, NULL))
+                return EXIT_FAILURE;
             if (safeWrite(STDOUT, PROMPT_STR, sizeof(PROMPT_STR)))
                 return EXIT_FAILURE;
         }
